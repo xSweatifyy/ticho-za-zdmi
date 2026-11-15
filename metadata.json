@@ -1,0 +1,6 @@
+{
+  "name": "Ticho za zdmi",
+  "description": "Nezávislá platforma a interaktivní mapa pro anonymní sdílení příběhů, hodnocení kvality péče a dokumentaci nedostatků v psychiatrických nemocnicích a léčebnách v ČR a SR.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

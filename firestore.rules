@@ -1,0 +1,323 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Boot connection test document (read-only)
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidRatingId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 256 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'developing.andilek@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidRatingScore(val) {
+      return (val is int || val is float) && val >= 1 && val <= 5;
+    }
+
+    function isValidOptionalRating(val) {
+      return (val is int || val is float) && val >= 0 && val <= 5;
+    }
+
+    function isValidFacilityType(t) {
+      return t in [
+        'psychiatricka_nemocnice',
+        'psychiatricka_lecebna',
+        'detska_psychiatricka_nemocnice',
+        'detska_psychiatricka_lecebna',
+        'krizove_centrum',
+        'denni_stacionar',
+        'detska_psychiatrie',
+        'cdz_ambulance'
+      ];
+    }
+
+    function isValidDeficiencyList(arr) {
+      return arr is list &&
+        arr.size() <= 8 &&
+        arr.hasOnly([
+          'staff_shortage',
+          'building_condition',
+          'long_wait_times',
+          'lack_of_privacy',
+          'overmedication',
+          'communication',
+          'hygiene',
+          'accessibility'
+        ]);
+    }
+
+    function isValidStory(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+        'country', 'city', 'deficiencyCategories', 'deficienciesSummary',
+        'isAnonymous', 'isOfficialEditorial', 'initialCareRating',
+        'initialStaffRating', 'initialBuildingRating', 'initialAccessibilityRating',
+        'isEncrypted', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+        'country', 'city', 'placeId', 'deficiencyCategories', 'deficienciesSummary',
+        'isAnonymous', 'isOfficialEditorial', 'isVerified', 'authorName', 'authorAge',
+        'initialCareRating', 'initialStaffRating', 'initialBuildingRating',
+        'initialAccessibilityRating', 'coverImage', 'isEncrypted', 'authorUid',
+        'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 1024 &&
+      data.excerpt is string && data.excerpt.size() >= 1 && data.excerpt.size() <= 2048 &&
+      data.content is string && data.content.size() >= 1 && data.content.size() <= 40000 &&
+      data.facilityName is string && data.facilityName.size() >= 1 && data.facilityName.size() <= 512 &&
+      isValidFacilityType(data.facilityType) &&
+      data.country in ['CZ', 'SK'] &&
+      data.city is string && data.city.size() >= 1 && data.city.size() <= 256 &&
+      (!('placeId' in data) || (data.placeId is string && data.placeId.size() <= 256)) &&
+      isValidDeficiencyList(data.deficiencyCategories) &&
+      data.deficienciesSummary is string && data.deficienciesSummary.size() <= 8192 &&
+      data.isAnonymous is bool &&
+      data.isOfficialEditorial is bool &&
+      (!('isVerified' in data) || data.isVerified is bool) &&
+      (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 512)) &&
+      (!('authorAge' in data) || (data.authorAge is string && data.authorAge.size() <= 256)) &&
+      isValidOptionalRating(data.initialCareRating) &&
+      isValidOptionalRating(data.initialStaffRating) &&
+      isValidOptionalRating(data.initialBuildingRating) &&
+      isValidOptionalRating(data.initialAccessibilityRating) &&
+      (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() <= 512)) &&
+      data.isEncrypted is bool &&
+      isValidId(data.authorUid) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidStoryPrivateContact(data, storyId) {
+      return data.keys().hasAll(['storyId', 'authorUid', 'encryptedNote', 'createdAt']) &&
+        data.keys().hasOnly(['storyId', 'authorUid', 'encryptedNote', 'createdAt']) &&
+        isValidId(data.storyId) &&
+        data.storyId == storyId &&
+        isValidId(data.authorUid) &&
+        data.encryptedNote is string && data.encryptedNote.size() >= 1 && data.encryptedNote.size() <= 8192 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidComment(data, storyId) {
+      return data.keys().hasAll(['id', 'storyId', 'body', 'isAnonymous', 'isEncrypted', 'authorUid', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'storyId', 'body', 'authorNickname', 'authorAge', 'isAnonymous', 'isEncrypted', 'authorUid', 'createdAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.storyId) &&
+        data.storyId == storyId &&
+        data.body is string && data.body.size() >= 1 && data.body.size() <= 8192 &&
+        (!('authorNickname' in data) || (data.authorNickname is string && data.authorNickname.size() <= 512)) &&
+        (!('authorAge' in data) || (data.authorAge is string && data.authorAge.size() <= 256)) &&
+        data.isAnonymous is bool &&
+        data.isEncrypted is bool &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidStoryRating(data) {
+      return data.keys().hasAll([
+        'id', 'storyId', 'raterUid', 'careRating', 'staffRating',
+        'buildingRating', 'accessibilityRating', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'storyId', 'raterUid', 'careRating', 'staffRating',
+        'buildingRating', 'accessibilityRating', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidRatingId(data.id) &&
+      isValidId(data.storyId) &&
+      isValidId(data.raterUid) &&
+      isValidRatingScore(data.careRating) &&
+      isValidRatingScore(data.staffRating) &&
+      isValidRatingScore(data.buildingRating) &&
+      isValidRatingScore(data.accessibilityRating) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidFacilityReport(data) {
+      return data.keys().hasAll([
+        'id', 'placeId', 'facilityName', 'facilityType', 'country',
+        'lat', 'lng', 'careRating', 'staffRating', 'buildingRating',
+        'accessibilityRating', 'deficiencies', 'note', 'isAnonymous',
+        'isEncrypted', 'authorUid', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'placeId', 'facilityName', 'facilityAddress', 'facilityType',
+        'country', 'lat', 'lng', 'careRating', 'staffRating', 'buildingRating',
+        'accessibilityRating', 'deficiencies', 'note', 'authorNickname',
+        'authorAge', 'isAnonymous', 'isEncrypted', 'authorUid', 'createdAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.placeId is string && data.placeId.size() >= 1 && data.placeId.size() <= 256 &&
+      data.facilityName is string && data.facilityName.size() >= 1 && data.facilityName.size() <= 512 &&
+      (!('facilityAddress' in data) || (data.facilityAddress is string && data.facilityAddress.size() <= 512)) &&
+      isValidFacilityType(data.facilityType) &&
+      data.country in ['CZ', 'SK'] &&
+      (data.lat is float || data.lat is int) && data.lat >= 47 && data.lat <= 52 &&
+      (data.lng is float || data.lng is int) && data.lng >= 11 && data.lng <= 23 &&
+      isValidRatingScore(data.careRating) &&
+      isValidRatingScore(data.staffRating) &&
+      isValidRatingScore(data.buildingRating) &&
+      isValidRatingScore(data.accessibilityRating) &&
+      isValidDeficiencyList(data.deficiencies) &&
+      data.note is string && data.note.size() >= 1 && data.note.size() <= 8192 &&
+      (!('authorNickname' in data) || (data.authorNickname is string && data.authorNickname.size() <= 512)) &&
+      (!('authorAge' in data) || (data.authorAge is string && data.authorAge.size() <= 256)) &&
+      data.isAnonymous is bool &&
+      data.isEncrypted is bool &&
+      isValidId(data.authorUid) &&
+      data.createdAt is timestamp;
+    }
+
+    // Admins collection (strictly admin-only)
+    match /admins/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Stories collection
+    match /stories/{storyId} {
+      allow list: if true;
+      allow get: if isValidId(storyId);
+
+      allow create: if isVerifiedUser() &&
+        isValidId(storyId) &&
+        isValidStory(incoming()) &&
+        incoming().id == storyId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (incoming().isOfficialEditorial == false && (!('isVerified' in incoming()) || incoming().isVerified == false)));
+
+      allow update: if isAdmin() &&
+        isValidId(storyId) &&
+        isValidStory(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+          'country', 'city', 'placeId', 'deficiencyCategories', 'deficienciesSummary',
+          'isAnonymous', 'isOfficialEditorial', 'isVerified', 'authorName', 'authorAge',
+          'initialCareRating', 'initialStaffRating', 'initialBuildingRating',
+          'initialAccessibilityRating', 'coverImage', 'isEncrypted', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(storyId);
+
+      // Private contact notes (PII isolated)
+      match /private/{contactId} {
+        allow get: if isValidId(storyId) && isValidId(contactId) && isSignedIn() && (isAdmin() || existing().authorUid == request.auth.uid);
+        allow list: if isAdmin() && isValidId(storyId);
+        allow create: if isVerifiedUser() &&
+          isValidId(storyId) &&
+          isValidId(contactId) &&
+          isValidStoryPrivateContact(incoming(), storyId) &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/stories/$(storyId));
+        allow delete: if isAdmin() && isValidId(storyId) && isValidId(contactId);
+      }
+
+      // Discussion comments under each story
+      match /comments/{commentId} {
+        allow list: if isValidId(storyId);
+        allow get: if isValidId(storyId) && isValidId(commentId);
+
+        allow create: if isVerifiedUser() &&
+          isValidId(storyId) &&
+          isValidId(commentId) &&
+          isValidComment(incoming(), storyId) &&
+          incoming().id == commentId &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/stories/$(storyId));
+
+        allow delete: if isValidId(storyId) && isValidId(commentId) && (
+          isAdmin() || (isVerifiedUser() && existing().authorUid == request.auth.uid)
+        );
+      }
+    }
+
+    // Community star ratings for stories (1 document per user per story)
+    match /storyRatings/{ratingId} {
+      allow list: if true;
+      allow get: if isValidRatingId(ratingId);
+
+      allow create: if isVerifiedUser() &&
+        isValidRatingId(ratingId) &&
+        isValidStoryRating(incoming()) &&
+        incoming().id == ratingId &&
+        ratingId == incoming().storyId + '_' + request.auth.uid &&
+        incoming().raterUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/stories/$(incoming().storyId));
+
+      allow update: if isVerifiedUser() &&
+        isValidRatingId(ratingId) &&
+        isValidStoryRating(incoming()) &&
+        existing().raterUid == request.auth.uid &&
+        incoming().id == existing().id &&
+        incoming().storyId == existing().storyId &&
+        incoming().raterUid == existing().raterUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'careRating', 'staffRating', 'buildingRating', 'accessibilityRating', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidRatingId(ratingId);
+    }
+
+    // Facility reports tied to interactive map places
+    match /facilityReports/{reportId} {
+      allow list: if true;
+      allow get: if isValidId(reportId);
+
+      allow create: if isVerifiedUser() &&
+        isValidId(reportId) &&
+        isValidFacilityReport(incoming()) &&
+        incoming().id == reportId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(reportId);
+    }
+  }
+}

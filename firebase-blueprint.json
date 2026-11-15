@@ -1,0 +1,203 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized platform administrator record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 256 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "Personal experience or editorial story about psychiatric care in CZ/SK",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "excerpt": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 40000 },
+        "facilityName": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "facilityType": {
+          "type": "string",
+          "enum": ["psychiatricka_nemocnice", "psychiatricka_lecebna", "detska_psychiatricka_nemocnice", "detska_psychiatricka_lecebna", "krizove_centrum", "denni_stacionar", "detska_psychiatrie", "cdz_ambulance"]
+        },
+        "country": { "type": "string", "enum": ["CZ", "SK"] },
+        "city": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "placeId": { "type": "string", "maxLength": 256 },
+        "deficiencyCategories": { "type": "array", "description": "List of systemic deficiency categories" },
+        "deficienciesSummary": { "type": "string", "maxLength": 8192 },
+        "isAnonymous": { "type": "boolean" },
+        "isOfficialEditorial": { "type": "boolean" },
+        "isVerified": { "type": "boolean", "description": "Administrator-verified experience badge" },
+        "authorName": { "type": "string", "maxLength": 512 },
+        "authorAge": { "type": "string", "maxLength": 256 },
+        "initialCareRating": { "type": "number" },
+        "initialStaffRating": { "type": "number" },
+        "initialBuildingRating": { "type": "number" },
+        "initialAccessibilityRating": { "type": "number" },
+        "coverImage": { "type": "string", "maxLength": 512 },
+        "isEncrypted": { "type": "boolean" },
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "title",
+        "excerpt",
+        "content",
+        "facilityName",
+        "facilityType",
+        "country",
+        "city",
+        "deficiencyCategories",
+        "deficienciesSummary",
+        "isAnonymous",
+        "isOfficialEditorial",
+        "initialCareRating",
+        "initialStaffRating",
+        "initialBuildingRating",
+        "initialAccessibilityRating",
+        "isEncrypted",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StoryPrivateContact": {
+      "title": "StoryPrivateContact",
+      "description": "Encrypted private contact note visible only to administrators",
+      "type": "object",
+      "properties": {
+        "storyId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "encryptedNote": { "type": "string", "maxLength": 8192 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storyId", "authorUid", "encryptedNote", "createdAt"]
+    },
+    "StoryComment": {
+      "title": "StoryComment",
+      "description": "Discussion comment on a story",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "storyId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "body": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "authorNickname": { "type": "string", "maxLength": 512 },
+        "authorAge": { "type": "string", "maxLength": 256 },
+        "isAnonymous": { "type": "boolean" },
+        "isEncrypted": { "type": "boolean" },
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storyId", "body", "isAnonymous", "isEncrypted", "authorUid", "createdAt"]
+    },
+    "StoryRating": {
+      "title": "StoryRating",
+      "description": "Community star rating of care quality for a story",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 256 },
+        "storyId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "raterUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "careRating": { "type": "number" },
+        "staffRating": { "type": "number" },
+        "buildingRating": { "type": "number" },
+        "accessibilityRating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "storyId",
+        "raterUid",
+        "careRating",
+        "staffRating",
+        "buildingRating",
+        "accessibilityRating",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FacilityReport": {
+      "title": "FacilityReport",
+      "description": "Community experience and deficiency report tied to a Google Places facility",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "placeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "facilityName": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "facilityAddress": { "type": "string", "maxLength": 512 },
+        "facilityType": {
+          "type": "string",
+          "enum": ["psychiatricka_nemocnice", "psychiatricka_lecebna", "detska_psychiatricka_nemocnice", "detska_psychiatricka_lecebna", "krizove_centrum", "denni_stacionar", "detska_psychiatrie", "cdz_ambulance"]
+        },
+        "country": { "type": "string", "enum": ["CZ", "SK"] },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "careRating": { "type": "number" },
+        "staffRating": { "type": "number" },
+        "buildingRating": { "type": "number" },
+        "accessibilityRating": { "type": "number" },
+        "deficiencies": { "type": "array" },
+        "note": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "authorNickname": { "type": "string", "maxLength": 512 },
+        "authorAge": { "type": "string", "maxLength": 256 },
+        "isAnonymous": { "type": "boolean" },
+        "isEncrypted": { "type": "boolean" },
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "placeId",
+        "facilityName",
+        "facilityType",
+        "country",
+        "lat",
+        "lng",
+        "careRating",
+        "staffRating",
+        "buildingRating",
+        "accessibilityRating",
+        "deficiencies",
+        "note",
+        "isAnonymous",
+        "isEncrypted",
+        "authorUid",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Administrator allowlist"
+    },
+    "/stories/{storyId}": {
+      "schema": { "$ref": "#/entities/Story" },
+      "description": "Publicly readable stories (with client-side encrypted sensitive text)"
+    },
+    "/stories/{storyId}/private/{contactId}": {
+      "schema": { "$ref": "#/entities/StoryPrivateContact" },
+      "description": "Encrypted private contact notes restricted to admin and author"
+    },
+    "/stories/{storyId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/StoryComment" },
+      "description": "Discussion comments anchored to a parent story"
+    },
+    "/storyRatings/{ratingId}": {
+      "schema": { "$ref": "#/entities/StoryRating" },
+      "description": "Community star ratings per story and user"
+    },
+    "/facilityReports/{reportId}": {
+      "schema": { "$ref": "#/entities/FacilityReport" },
+      "description": "Community quality & deficiency reports linked to map facilities"
+    }
+  }
+}
