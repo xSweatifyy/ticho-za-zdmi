@@ -4,13 +4,19 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
-  const mapsApiKey =
+  const env = loadEnv(mode, process.cwd(), '');
+  const rawMapsKey =
     env.VITE_GOOGLE_MAPS_API_KEY ||
     env.GOOGLE_MAPS_API_KEY ||
+    env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    env.VITE_MAPS_API_KEY ||
     process.env.VITE_GOOGLE_MAPS_API_KEY ||
     process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    process.env.VITE_MAPS_API_KEY ||
     '';
+  const cleanedKey = rawMapsKey.trim().replace(/^["']|["']$/g, '');
+  const mapsApiKey = cleanedKey === 'MY_GOOGLE_MAPS_API_KEY' ? '' : cleanedKey;
 
   return {
     plugins: [react(), tailwindcss()],

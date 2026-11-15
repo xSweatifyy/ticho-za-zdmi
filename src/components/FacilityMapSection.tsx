@@ -128,10 +128,20 @@ const PRESET_QUERIES: PresetQuery[] = [
   },
 ];
 
+function cleanKey(val: unknown): string {
+  if (typeof val !== 'string') return '';
+  const cleaned = val.trim().replace(/^["']|["']$/g, '');
+  if (!cleaned || cleaned === 'MY_GOOGLE_MAPS_API_KEY') return '';
+  return cleaned;
+}
+
 function getMapsApiKey(): string {
-  const fromVite = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (fromVite && typeof fromVite === 'string' && fromVite.trim()) return fromVite.trim();
-  if (typeof __GMP_API_KEY__ !== 'undefined' && __GMP_API_KEY__) return __GMP_API_KEY__;
+  const fromVite = cleanKey(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+  if (fromVite) return fromVite;
+  if (typeof __GMP_API_KEY__ !== 'undefined') {
+    const fromDefine = cleanKey(__GMP_API_KEY__);
+    if (fromDefine) return fromDefine;
+  }
   return '';
 }
 
@@ -152,18 +162,59 @@ export function FacilityMapSection(props: FacilityMapSectionProps) {
 
   if (!apiKey) {
     return (
-      <section id="mapa-zarizeni" className="py-16 border-t border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="mapa-zarizeni" className="py-16 border-t border-border bg-card/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <div className="rounded-xl border border-border bg-card p-8 text-center space-y-3">
             <MapPin className="h-8 w-8 text-muted-foreground mx-auto" />
             <h2 className="font-serif text-2xl font-semibold">
-              Mapa psychiatrických zařízení v ČR a SR
+              Mapa psychiatrických i dětských nemocnic, léčeben a center
             </h2>
-            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              Klíč pro Google Maps Platform není v aktuálním běhovém prostředí načten. Po restartu
-              serveru s nastaveným klíčem se zde zobrazí živá interaktivní mapa zařízení.
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              V produkčním prostředí (např. na Vercelu) zatím není nastavena proměnná prostředí pro
+              Google Maps Platform. Přidejte v nastavení projektu proměnnou{' '}
+              <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-foreground">
+                VITE_GOOGLE_MAPS_API_KEY
+              </code>{' '}
+              (případně{' '}
+              <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-foreground">
+                GOOGLE_MAPS_API_KEY
+              </code>
+              ) a spusťte nový build (Redeploy).
             </p>
           </div>
+
+          {props.reports.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="font-serif text-xl font-semibold">
+                Poslední komunitní hodnocení zařízení ({props.reports.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {props.reports.slice(0, 6).map((rep) => (
+                  <Card key={rep.id}>
+                    <CardHeader className="pb-2">
+                      <p className="text-xs text-muted-foreground">
+                        {FACILITY_TYPE_LABELS[rep.facilityType]} · {rep.country}
+                      </p>
+                      <CardTitle className="text-base leading-snug">{rep.facilityName}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      <StarRating value={rep.careRating} size="sm" readOnly showValue />
+                      <p className="text-sm text-foreground leading-relaxed line-clamp-3">
+                        {rep.note}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {rep.isAnonymous || !rep.authorNickname
+                          ? 'Anonymní pacient / rodina'
+                          : rep.authorNickname}
+                        {rep.authorAge ? ` · ${rep.authorAge}` : ''} ·{' '}
+                        {formatCzechDate(rep.createdAt)}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     );
