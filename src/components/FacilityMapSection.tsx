@@ -78,41 +78,89 @@ interface PresetQuery {
   zoom: number;
 }
 
+const CZ_HOSPITAL_QUERIES: SearchQuerySpec[] = [
+  { query: 'Psychiatrická nemocnice Bohnice', region: 'cz' },
+  { query: 'Národní ústav duševního zdraví Klecany', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Kosmonosy', region: 'cz' },
+  { query: 'Centrum duševní rehabilitace Beroun', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Horní Beřkovice', region: 'cz' },
+  { query: 'Psychiatrická nemocnice v Dobřanech', region: 'cz' },
+  { query: 'Dětská psychiatrická nemocnice Louny', region: 'cz' },
+  { query: 'Psychiatrická léčebna Petrohrad', region: 'cz' },
+  { query: 'Dětská psychiatrická nemocnice Opařany', region: 'cz' },
+  { query: 'Psychiatrická léčebna Červený Dvůr', region: 'cz' },
+  { query: 'Psychiatrická léčebna Lnáře', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Písek', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Havlíčkův Brod', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Jihlava', region: 'cz' },
+  { query: 'Dětská psychiatrická nemocnice Velká Bíteš', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Brno', region: 'cz' },
+  { query: 'Psychiatrická nemocnice v Kroměříži', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Šternberk', region: 'cz' },
+  { query: 'Psychiatrická nemocnice Bílá Voda', region: 'cz' },
+  { query: 'Psychiatrická nemocnice v Opavě', region: 'cz' },
+  { query: 'psychiatrická klinika fakultní nemocnice Česká republika', region: 'cz' },
+];
+
+const SK_HOSPITAL_QUERIES: SearchQuerySpec[] = [
+  { query: 'Psychiatrická nemocnica Philippa Pinela Pezinok', region: 'sk' },
+  { query: 'Klinika detskej psychiatrie NÚDCH Bratislava', region: 'sk' },
+  { query: 'Psychiatrická nemocnica Veľké Zálužie', region: 'sk' },
+  { query: 'Psychiatrická nemocnica Hronovce', region: 'sk' },
+  { query: 'Psychiatrická nemocnica prof. Matulaya Kremnica', region: 'sk' },
+  { query: 'Psychiatrická liečebňa Sučany', region: 'sk' },
+  { query: 'Odborný liečebný ústav psychiatrický Predná Hora', region: 'sk' },
+  { query: 'Psychiatrická liečebňa Samuela Bluma Plešivec', region: 'sk' },
+  { query: 'Detská psychiatrická liečebňa Hraň', region: 'sk' },
+  { query: 'Psychiatrická nemocnica Michalovce', region: 'sk' },
+  { query: 'psychiatrická klinika univerzitná nemocnica Slovensko', region: 'sk' },
+];
+
+const CHILD_HOSPITAL_QUERIES: SearchQuerySpec[] = [
+  { query: 'Dětská psychiatrická nemocnice Opařany', region: 'cz' },
+  { query: 'Dětská psychiatrická nemocnice Louny', region: 'cz' },
+  { query: 'Dětská psychiatrická nemocnice Velká Bíteš', region: 'cz' },
+  { query: 'Psychiatrická nemocnice v Dobřanech', region: 'cz' },
+  { query: 'Dětská psychiatrická klinika FN Motol Praha', region: 'cz' },
+  { query: 'Detská psychiatrická liečebňa Hraň', region: 'sk' },
+  { query: 'Klinika detskej psychiatrie NÚDCH Bratislava', region: 'sk' },
+];
+
 const PRESET_QUERIES: PresetQuery[] = [
+  {
+    id: 'all_hospitals',
+    label: 'Psychiatrické nemocnice a léčebny (ČR i SR)',
+    queries: [...CZ_HOSPITAL_QUERIES, ...SK_HOSPITAL_QUERIES],
+    center: { lat: 49.35, lng: 17.5 },
+    zoom: 6,
+  },
   {
     id: 'cz_hospitals',
     label: 'Psychiatrické nemocnice (ČR)',
-    queries: [
-      { query: 'psychiatrická nemocnice léčebna Česká republika', region: 'cz' },
-    ],
+    queries: CZ_HOSPITAL_QUERIES,
     center: { lat: 49.8, lng: 15.47 },
     zoom: 7,
   },
   {
     id: 'sk_hospitals',
     label: 'Psychiatrické nemocnice (SR)',
-    queries: [
-      { query: 'psychiatrická nemocnica liečebňa Slovensko', region: 'sk' },
-    ],
+    queries: SK_HOSPITAL_QUERIES,
     center: { lat: 48.68, lng: 19.65 },
     zoom: 7,
   },
   {
     id: 'child_hospitals',
     label: 'Dětské psychiatrické nemocnice a léčebny',
-    queries: [
-      { query: 'dětská psychiatrická nemocnice Dobřany', region: 'cz' },
-      { query: 'dětská psychiatrická nemocnice léčebna Česká republika', region: 'cz' },
-      { query: 'detská psychiatrická nemocnica liečebňa Slovensko', region: 'sk' },
-    ],
-    center: { lat: 49.45, lng: 16.85 },
-    zoom: 7,
+    queries: CHILD_HOSPITAL_QUERIES,
+    center: { lat: 49.35, lng: 17.5 },
+    zoom: 6,
   },
   {
     id: 'crisis_cdz',
     label: 'Krizová centra a CDZ',
     queries: [
-      { query: 'centrum duševního zdraví krizové centrum psychiatrie', region: 'cz' },
+      { query: 'centrum duševního zdraví krizové centrum', region: 'cz' },
+      { query: 'centrum duševného zdravia krízové centrum', region: 'sk' },
     ],
     center: { lat: 49.45, lng: 16.85 },
     zoom: 7,
@@ -122,6 +170,7 @@ const PRESET_QUERIES: PresetQuery[] = [
     label: 'Dětská psychiatrie (ambulance)',
     queries: [
       { query: 'dětská psychiatrie ambulance oddělení', region: 'cz' },
+      { query: 'detská psychiatria ambulancia', region: 'sk' },
     ],
     center: { lat: 49.45, lng: 16.85 },
     zoom: 7,
@@ -253,7 +302,7 @@ function FacilityMapWorkspace({
   const placesLib = useMapsLibrary('places');
   const loadingStatus = useApiLoadingStatus();
 
-  const [activePreset, setActivePreset] = useState<string>('cz_hospitals');
+  const [activePreset, setActivePreset] = useState<string>('all_hospitals');
   const [searchInput, setSearchInput] = useState('');
   const [places, setPlaces] = useState<MapPlaceResult[]>([]);
   const [presetCache, setPresetCache] = useState<Record<string, MapPlaceResult[]>>({});
@@ -290,6 +339,26 @@ function FacilityMapWorkspace({
     return grouped;
   }, [reports]);
 
+  const fitGoogleMapToPlaces = useCallback(
+    (items: MapPlaceResult[], targetCenter?: { lat: number; lng: number }, targetZoom?: number) => {
+      if (!map) return;
+      if (items.length > 1 && typeof google !== 'undefined' && google.maps?.LatLngBounds) {
+        const bounds = new google.maps.LatLngBounds();
+        for (const item of items) {
+          bounds.extend({ lat: item.lat, lng: item.lng });
+        }
+        map.fitBounds(bounds, 40);
+      } else if (items.length === 1) {
+        map.panTo({ lat: items[0].lat, lng: items[0].lng });
+        map.setZoom(12);
+      } else if (targetCenter) {
+        map.panTo(targetCenter);
+        if (targetZoom) map.setZoom(targetZoom);
+      }
+    },
+    [map]
+  );
+
   const runPlaceSearch = useCallback(
     async (
       queries: SearchQuerySpec[],
@@ -302,10 +371,7 @@ function FacilityMapWorkspace({
         const cached = presetCache[cacheKey];
         setPlaces(cached);
         setSelectedPlace(cached[0] ?? null);
-        if (map && targetCenter) {
-          map.panTo(targetCenter);
-          if (targetZoom) map.setZoom(targetZoom);
-        }
+        fitGoogleMapToPlaces(cached, targetCenter, targetZoom);
         return;
       }
 
@@ -326,11 +392,10 @@ function FacilityMapWorkspace({
                 'userRatingCount',
                 'nationalPhoneNumber',
                 'websiteURI',
-                'regularOpeningHours',
               ],
               language: q.region === 'sk' ? 'sk' : 'cs',
               region: q.region,
-              maxResultCount: 15,
+              maxResultCount: 20,
             };
             return placesLib.Place.searchByText(request).then((res) => ({
               region: q.region,
@@ -379,21 +444,20 @@ function FacilityMapWorkspace({
         }
 
         if (cacheKey && mapped.length > 0) {
-          setPresetCache((prev) => ({ ...prev, [cacheKey]: mapped }));
+          setPresetCache((prev) => {
+            const next = { ...prev, [cacheKey]: mapped };
+            if (cacheKey === 'all_hospitals') {
+              next.cz_hospitals = mapped.filter((item) => item.country === 'CZ');
+              next.sk_hospitals = mapped.filter((item) => item.country === 'SK');
+            }
+            return next;
+          });
         }
 
         setPlaces(mapped);
         if (mapped.length > 0) {
           setSelectedPlace(mapped[0]);
-          if (map && targetCenter) {
-            map.panTo(targetCenter);
-            if (targetZoom) map.setZoom(targetZoom);
-          } else if (map && mapped[0]) {
-            map.panTo({ lat: mapped[0].lat, lng: mapped[0].lng });
-            if (mapped.length <= 5) {
-              map.setZoom(12);
-            }
-          }
+          fitGoogleMapToPlaces(mapped, targetCenter, targetZoom);
         } else {
           setSelectedPlace(null);
         }
@@ -406,7 +470,7 @@ function FacilityMapWorkspace({
         setIsSearching(false);
       }
     },
-    [placesLib, map, presetCache]
+    [placesLib, presetCache, fitGoogleMapToPlaces]
   );
 
   // Automatic initial load once Places library is ready
@@ -858,29 +922,35 @@ function FacilityMapWorkspace({
                 {searchError}
               </p>
             )}
-            <div className="rounded-xl border border-border bg-card divide-y divide-border max-h-[190px] overflow-y-auto">
-              {places.map((p) => {
-                const count = (reportsByPlaceId[p.placeId] || []).length;
-                const active = selectedPlace?.placeId === p.placeId;
-                return (
-                  <button
-                    key={p.placeId}
-                    type="button"
-                    onClick={() => handleSelectPlaceFromList(p)}
-                    className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
-                      active ? 'bg-primary/5' : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{p.address}</p>
-                    </div>
-                    <span className="text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">
-                      {count > 0 ? `${count} hodn.` : p.country}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="px-4 py-2 border-b border-border bg-muted/40 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Seznam zařízení na mapě</span>
+                <span className="font-mono tabular-nums">{places.length}</span>
+              </div>
+              <div className="divide-y divide-border max-h-[240px] overflow-y-auto">
+                {places.map((p) => {
+                  const count = (reportsByPlaceId[p.placeId] || []).length;
+                  const active = selectedPlace?.placeId === p.placeId;
+                  return (
+                    <button
+                      key={p.placeId}
+                      type="button"
+                      onClick={() => handleSelectPlaceFromList(p)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                        active ? 'bg-primary/5' : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{p.address}</p>
+                      </div>
+                      <span className="text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">
+                        {count > 0 ? `${count} hodn.` : p.country}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

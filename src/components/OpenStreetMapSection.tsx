@@ -25,6 +25,7 @@ import {
 } from '@/src/components/ui/select';
 import { Textarea } from '@/src/components/ui/textarea';
 import { createFacilityReport, deleteFacilityReport } from '@/src/lib/repository';
+import { OSM_VERIFIED_FACILITIES, type OsmFacilityEntry } from '@/src/data/osmFacilities';
 import { formatCzechDate } from '@/src/lib/utils';
 import {
   DEFICIENCY_LABELS,
@@ -47,60 +48,63 @@ interface OpenStreetMapSectionProps {
   onWriteStoryForFacility: (place: MapPlaceResult) => void;
 }
 
+type DirectoryCategory = 'all_hospitals' | 'cz_hospitals' | 'sk_hospitals' | 'child_hospitals';
+
 interface OsmQuerySpec {
   query: string;
-  lat: number;
-  lon: number;
   countryFilter?: 'CZ' | 'SK';
 }
 
 interface OsmPreset {
   id: string;
   label: string;
+  directoryCategory?: DirectoryCategory;
   queries: OsmQuerySpec[];
   center: [number, number];
   zoom: number;
 }
 
+const CZ_SK_BBOX = '12.0,47.7,22.6,51.1';
+
 const OSM_PRESETS: OsmPreset[] = [
+  {
+    id: 'all_hospitals',
+    label: 'Psychiatrické nemocnice a léčebny (ČR i SR)',
+    directoryCategory: 'all_hospitals',
+    queries: [],
+    center: [49.35, 17.5],
+    zoom: 6,
+  },
   {
     id: 'cz_hospitals',
     label: 'Psychiatrické nemocnice (ČR)',
-    queries: [
-      { query: 'psychiatrická nemocnice', lat: 49.8, lon: 15.47, countryFilter: 'CZ' },
-      { query: 'psychiatrická léčebna', lat: 49.8, lon: 15.47, countryFilter: 'CZ' },
-    ],
+    directoryCategory: 'cz_hospitals',
+    queries: [],
     center: [49.8, 15.47],
     zoom: 7,
   },
   {
     id: 'sk_hospitals',
     label: 'Psychiatrické nemocnice (SR)',
-    queries: [
-      { query: 'psychiatrická nemocnica', lat: 48.68, lon: 19.65, countryFilter: 'SK' },
-      { query: 'psychiatrická liečebňa', lat: 48.68, lon: 19.65, countryFilter: 'SK' },
-    ],
+    directoryCategory: 'sk_hospitals',
+    queries: [],
     center: [48.68, 19.65],
     zoom: 7,
   },
   {
     id: 'child_hospitals',
     label: 'Dětské psychiatrické nemocnice a léčebny',
-    queries: [
-      { query: 'Psychiatrická nemocnice Dobřany', lat: 49.65, lon: 13.29, countryFilter: 'CZ' },
-      { query: 'dětská psychiatrická nemocnice Opařany', lat: 49.4, lon: 14.48, countryFilter: 'CZ' },
-      { query: 'dětská psychiatrická léčebna', lat: 49.8, lon: 15.47, countryFilter: 'CZ' },
-      { query: 'detská psychiatrická liečebňa', lat: 48.68, lon: 19.65, countryFilter: 'SK' },
-    ],
-    center: [49.45, 16.5],
-    zoom: 7,
+    directoryCategory: 'child_hospitals',
+    queries: [],
+    center: [49.35, 17.5],
+    zoom: 6,
   },
   {
     id: 'crisis_cdz',
     label: 'Krizová centra a CDZ',
     queries: [
-      { query: 'centrum duševního zdraví', lat: 49.8, lon: 15.47 },
-      { query: 'krízové centrum psychiatria', lat: 48.68, lon: 19.65 },
+      { query: 'centrum duševního zdraví' },
+      { query: 'krízové centrum psychiatria' },
     ],
     center: [49.45, 16.85],
     zoom: 7,
@@ -109,13 +113,42 @@ const OSM_PRESETS: OsmPreset[] = [
     id: 'child_psych',
     label: 'Dětská psychiatrie (ambulance)',
     queries: [
-      { query: 'dětská psychiatrie', lat: 49.8, lon: 15.47 },
-      { query: 'detská psychiatria', lat: 48.68, lon: 19.65 },
+      { query: 'dětská psychiatrie' },
+      { query: 'detská psychiatria' },
     ],
     center: [49.45, 16.85],
     zoom: 7,
   },
 ];
+
+function stripDiacritics(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function isNearDuplicate(a: MapPlaceResult, b: MapPlaceResult): boolean {
+  const latDiff = Math.abs(a.lat - b.lat);
+  const lngDiff = Math.abs(a.lng - b.lng);
+  if (latDiff < 0.005 && lngDiff < 0.007) {
+    return true;
+  }
+  return false;
+}
+
+function toMapPlace(entry: OsmFacilityEntry): MapPlaceResult {
+  return {
+    placeId: entry.placeId,
+    name: entry.name,
+    address: entry.address,
+    lat: entry.lat,
+    lng: entry.lng,
+    website: entry.website,
+    phone: entry.phone,
+    country: entry.country,
+  };
+}
 
 interface PhotonFeature {
   properties?: {
@@ -203,7 +236,7 @@ export function OpenStreetMapSection({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
 
-  const [activePreset, setActivePreset] = useState<string>('cz_hospitals');
+  const [activePreset, setActivePreset] = useState<string>('all_hospitals');
   const [searchInput, setSearchInput] = useState('');
   const [places, setPlaces] = useState<MapPlaceResult[]>([]);
   const [presetCache, setPresetCache] = useState<Record<string, MapPlaceResult[]>>({});
@@ -264,20 +297,47 @@ export function OpenStreetMapSection({
     };
   }, []);
 
+  const fitMapToPlaces = useCallback(
+    (items: MapPlaceResult[], fallbackCenter?: [number, number], fallbackZoom?: number) => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      if (items.length > 1) {
+        const bounds = L.latLngBounds(items.map((item) => [item.lat, item.lng] as [number, number]));
+        map.fitBounds(bounds, { padding: [32, 32], maxZoom: 12, animate: true });
+      } else if (items.length === 1) {
+        map.setView([items[0].lat, items[0].lng], 12, { animate: true });
+      } else if (fallbackCenter) {
+        map.setView(fallbackCenter, fallbackZoom ?? 7, { animate: true });
+      }
+    },
+    []
+  );
+
   const runOsmSearch = useCallback(
     async (
       queries: OsmQuerySpec[],
       targetCenter?: [number, number],
       targetZoom?: number,
-      cacheKey?: string
+      cacheKey?: string,
+      directoryCategory?: DirectoryCategory,
+      rawSearchText?: string
     ) => {
+      if (directoryCategory) {
+        const directoryMatches = OSM_VERIFIED_FACILITIES.filter((entry) =>
+          entry.categories.includes(directoryCategory)
+        ).map(toMapPlace);
+        setSearchError(null);
+        setPlaces(directoryMatches);
+        setSelectedPlace(directoryMatches[0] ?? null);
+        fitMapToPlaces(directoryMatches, targetCenter, targetZoom);
+        return;
+      }
+
       if (cacheKey && presetCache[cacheKey]) {
         const cached = presetCache[cacheKey];
         setPlaces(cached);
         setSelectedPlace(cached[0] ?? null);
-        if (mapInstanceRef.current && targetCenter) {
-          mapInstanceRef.current.setView(targetCenter, targetZoom ?? 7, { animate: true });
-        }
+        fitMapToPlaces(cached, targetCenter, targetZoom);
         return;
       }
 
@@ -288,9 +348,23 @@ export function OpenStreetMapSection({
         const seenIds: Record<string, boolean> = {};
         const collected: MapPlaceResult[] = [];
 
+        if (rawSearchText) {
+          const needle = stripDiacritics(rawSearchText);
+          const tokens = needle.split(/\s+/).filter((t) => t.length >= 2);
+          for (const entry of OSM_VERIFIED_FACILITIES) {
+            const haystack = stripDiacritics(
+              `${entry.name} ${entry.address} ${(entry.keywords || []).join(' ')}`
+            );
+            if (tokens.some((tok) => haystack.includes(tok)) || haystack.includes(needle)) {
+              seenIds[entry.placeId] = true;
+              collected.push(toMapPlace(entry));
+            }
+          }
+        }
+
         const photonResponses = await Promise.allSettled(
           queries.map(async (q) => {
-            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.query)}&limit=15&lat=${q.lat}&lon=${q.lon}`;
+            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.query)}&limit=15&bbox=${CZ_SK_BBOX}`;
             const res = await fetch(url);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = (await res.json()) as { features?: PhotonFeature[] };
@@ -316,16 +390,20 @@ export function OpenStreetMapSection({
 
             const name = props.name || formatPhotonAddress(props);
             if (!name) continue;
-            seenIds[osmKey] = true;
 
-            collected.push({
+            const candidate: MapPlaceResult = {
               placeId: osmKey,
               name,
               address: formatPhotonAddress(props),
               lat: Number(coords[1]),
               lng: Number(coords[0]),
               country: (cc === 'SK' ? 'SK' : 'CZ') as CountryCode,
-            });
+            };
+
+            if (collected.some((existing) => isNearDuplicate(existing, candidate))) continue;
+
+            seenIds[osmKey] = true;
+            collected.push(candidate);
           }
         }
 
@@ -345,9 +423,8 @@ export function OpenStreetMapSection({
                 .replace(/[^a-zA-Z0-9_-]/g, '_')
                 .slice(0, 120);
               if (seenIds[osmKey]) continue;
-              seenIds[osmKey] = true;
               const cc = (n.address?.country_code || 'cz').toUpperCase();
-              collected.push({
+              const candidate: MapPlaceResult = {
                 placeId: osmKey,
                 name: n.name || n.display_name?.split(',')[0] || 'Psychiatrické zařízení',
                 address: n.display_name || '',
@@ -356,7 +433,10 @@ export function OpenStreetMapSection({
                 phone: n.extratags?.phone,
                 website: n.extratags?.website ? sanitizeHttpUrl(n.extratags.website) : undefined,
                 country: (cc === 'SK' ? 'SK' : 'CZ') as CountryCode,
-              });
+              };
+              if (collected.some((existing) => isNearDuplicate(existing, candidate))) continue;
+              seenIds[osmKey] = true;
+              collected.push(candidate);
             }
           }
         }
@@ -368,16 +448,7 @@ export function OpenStreetMapSection({
         setPlaces(collected);
         if (collected.length > 0) {
           setSelectedPlace(collected[0]);
-          if (mapInstanceRef.current) {
-            if (targetCenter) {
-              mapInstanceRef.current.setView(targetCenter, targetZoom ?? 7, { animate: true });
-            } else {
-              const zoomLevel = collected.length <= 5 ? 12 : 8;
-              mapInstanceRef.current.setView([collected[0].lat, collected[0].lng], zoomLevel, {
-                animate: true,
-              });
-            }
-          }
+          fitMapToPlaces(collected, targetCenter, targetZoom);
         } else {
           setSelectedPlace(null);
         }
@@ -389,13 +460,19 @@ export function OpenStreetMapSection({
         setIsSearching(false);
       }
     },
-    [presetCache]
+    [presetCache, fitMapToPlaces]
   );
 
   // Initial preset load
   useEffect(() => {
     const initial = OSM_PRESETS[0];
-    void runOsmSearch(initial.queries, initial.center, initial.zoom, initial.id);
+    void runOsmSearch(
+      initial.queries,
+      initial.center,
+      initial.zoom,
+      initial.id,
+      initial.directoryCategory
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -446,7 +523,13 @@ export function OpenStreetMapSection({
   const handlePresetClick = (preset: OsmPreset) => {
     setActivePreset(preset.id);
     setSearchInput('');
-    void runOsmSearch(preset.queries, preset.center, preset.zoom, preset.id);
+    void runOsmSearch(
+      preset.queries,
+      preset.center,
+      preset.zoom,
+      preset.id,
+      preset.directoryCategory
+    );
   };
 
   const handleCustomSearch = (e: React.FormEvent) => {
@@ -455,17 +538,6 @@ export function OpenStreetMapSection({
     if (!trimmed) return;
     setActivePreset('');
     const lower = trimmed.toLowerCase();
-    const isSk =
-      lower.includes('bratislav') ||
-      lower.includes('košic') ||
-      lower.includes('kosic') ||
-      lower.includes('pezinok') ||
-      lower.includes('slovens') ||
-      lower.includes('žilina') ||
-      lower.includes('trnava') ||
-      lower.includes('nitra');
-    const centerLat = isSk ? 48.68 : 49.8;
-    const centerLon = isSk ? 19.65 : 15.47;
     const hasPsychKeyword =
       lower.includes('psychiatr') ||
       lower.includes('léčebn') ||
@@ -473,12 +545,13 @@ export function OpenStreetMapSection({
       lower.includes('nemocnic');
 
     const queries: OsmQuerySpec[] = hasPsychKeyword
-      ? [{ query: trimmed, lat: centerLat, lon: centerLon }]
+      ? [{ query: trimmed }]
       : [
-          { query: `dětská psychiatrická ${trimmed}`, lat: centerLat, lon: centerLon },
-          { query: `psychiatrická nemocnice ${trimmed}`, lat: centerLat, lon: centerLon },
+          { query: `dětská psychiatrická ${trimmed}` },
+          { query: `psychiatrická nemocnice ${trimmed}` },
+          { query: `psychiatrická nemocnica ${trimmed}` },
         ];
-    void runOsmSearch(queries);
+    void runOsmSearch(queries, undefined, undefined, undefined, undefined, trimmed);
   };
 
   const handleSelectPlaceFromList = (place: MapPlaceResult) => {
@@ -826,29 +899,35 @@ export function OpenStreetMapSection({
               </p>
             )}
 
-            <div className="rounded-xl border border-border bg-card divide-y divide-border max-h-[190px] overflow-y-auto">
-              {places.map((p) => {
-                const count = (reportsByPlaceId[p.placeId] || []).length;
-                const active = selectedPlace?.placeId === p.placeId;
-                return (
-                  <button
-                    key={p.placeId}
-                    type="button"
-                    onClick={() => handleSelectPlaceFromList(p)}
-                    className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
-                      active ? 'bg-primary/5' : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{p.address}</p>
-                    </div>
-                    <span className="text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">
-                      {count > 0 ? `${count} hodn.` : p.country}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="px-4 py-2 border-b border-border bg-muted/40 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Seznam zařízení na mapě</span>
+                <span className="font-mono tabular-nums">{places.length}</span>
+              </div>
+              <div className="divide-y divide-border max-h-[240px] overflow-y-auto">
+                {places.map((p) => {
+                  const count = (reportsByPlaceId[p.placeId] || []).length;
+                  const active = selectedPlace?.placeId === p.placeId;
+                  return (
+                    <button
+                      key={p.placeId}
+                      type="button"
+                      onClick={() => handleSelectPlaceFromList(p)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                        active ? 'bg-primary/5' : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{p.address}</p>
+                      </div>
+                      <span className="text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">
+                        {count > 0 ? `${count} hodn.` : p.country}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
