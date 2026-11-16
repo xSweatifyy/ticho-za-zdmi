@@ -202,6 +202,51 @@ service cloud.firestore {
       data.createdAt is timestamp;
     }
 
+    function isValidStorySubmission(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+        'country', 'city', 'deficiencyCategories', 'deficienciesSummary',
+        'isAnonymous', 'initialCareRating', 'initialStaffRating',
+        'initialBuildingRating', 'initialAccessibilityRating',
+        'isEncrypted', 'status', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+        'country', 'city', 'placeId', 'deficiencyCategories', 'deficienciesSummary',
+        'isAnonymous', 'authorName', 'authorAge', 'initialCareRating',
+        'initialStaffRating', 'initialBuildingRating', 'initialAccessibilityRating',
+        'coverImage', 'privateAdminNote', 'isEncrypted', 'status', 'reviewNote',
+        'publishedStoryId', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 1024 &&
+      data.excerpt is string && data.excerpt.size() >= 1 && data.excerpt.size() <= 2048 &&
+      data.content is string && data.content.size() >= 1 && data.content.size() <= 40000 &&
+      data.facilityName is string && data.facilityName.size() >= 1 && data.facilityName.size() <= 512 &&
+      isValidFacilityType(data.facilityType) &&
+      data.country in ['CZ', 'SK'] &&
+      data.city is string && data.city.size() >= 1 && data.city.size() <= 256 &&
+      (!('placeId' in data) || (data.placeId is string && data.placeId.size() <= 256)) &&
+      isValidDeficiencyList(data.deficiencyCategories) &&
+      data.deficienciesSummary is string && data.deficienciesSummary.size() <= 8192 &&
+      data.isAnonymous is bool &&
+      (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 512)) &&
+      (!('authorAge' in data) || (data.authorAge is string && data.authorAge.size() <= 256)) &&
+      isValidOptionalRating(data.initialCareRating) &&
+      isValidOptionalRating(data.initialStaffRating) &&
+      isValidOptionalRating(data.initialBuildingRating) &&
+      isValidOptionalRating(data.initialAccessibilityRating) &&
+      (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() <= 512)) &&
+      (!('privateAdminNote' in data) || (data.privateAdminNote is string && data.privateAdminNote.size() <= 8192)) &&
+      data.isEncrypted is bool &&
+      data.status in ['pending', 'approved', 'rejected'] &&
+      (!('reviewNote' in data) || (data.reviewNote is string && data.reviewNote.size() <= 2048)) &&
+      (!('publishedStoryId' in data) || data.publishedStoryId == '' || isValidId(data.publishedStoryId)) &&
+      isValidId(data.authorUid) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
     // Admins collection (strictly admin-only)
     match /admins/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -209,19 +254,18 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // Stories collection
+    // Stories collection (published only by admin)
     match /stories/{storyId} {
       allow list: if true;
       allow get: if isValidId(storyId);
 
-      allow create: if isVerifiedUser() &&
+      allow create: if isAdmin() &&
         isValidId(storyId) &&
         isValidStory(incoming()) &&
         incoming().id == storyId &&
         incoming().authorUid == request.auth.uid &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        (isAdmin() || (incoming().isOfficialEditorial == false && (!('isVerified' in incoming()) || incoming().isVerified == false)));
+        incoming().updatedAt == request.time;
 
       allow update: if isAdmin() &&
         isValidId(storyId) &&
@@ -272,6 +316,42 @@ service cloud.firestore {
           isAdmin() || (isVerifiedUser() && existing().authorUid == request.auth.uid)
         );
       }
+    }
+
+    // User story submissions awaiting editorial approval
+    match /storySubmissions/{submissionId} {
+      allow get: if isValidId(submissionId) && (
+        isAdmin() || (isVerifiedUser() && existing().authorUid == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isVerifiedUser() && resource.data.authorUid == request.auth.uid);
+
+      allow create: if isVerifiedUser() &&
+        isValidId(submissionId) &&
+        isValidStorySubmission(incoming()) &&
+        incoming().id == submissionId &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        !('reviewNote' in incoming()) &&
+        !('publishedStoryId' in incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(submissionId) &&
+        isValidStorySubmission(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'excerpt', 'content', 'facilityName', 'facilityType',
+          'country', 'city', 'placeId', 'deficiencyCategories', 'deficienciesSummary',
+          'isAnonymous', 'authorName', 'authorAge', 'initialCareRating',
+          'initialStaffRating', 'initialBuildingRating', 'initialAccessibilityRating',
+          'coverImage', 'isEncrypted', 'status', 'reviewNote', 'publishedStoryId', 'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidId(submissionId);
     }
 
     // Community star ratings for stories (1 document per user per story)

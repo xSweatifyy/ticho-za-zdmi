@@ -48,6 +48,38 @@ export interface Story {
   updatedAt: Date | null;
 }
 
+export type StorySubmissionStatus = 'pending' | 'approved' | 'rejected';
+
+export interface StorySubmission {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  facilityName: string;
+  facilityType: FacilityType;
+  country: CountryCode;
+  city: string;
+  placeId?: string;
+  deficiencyCategories: DeficiencyCategory[];
+  deficienciesSummary: string;
+  isAnonymous: boolean;
+  authorName?: string;
+  authorAge?: string;
+  initialCareRating: number;
+  initialStaffRating: number;
+  initialBuildingRating: number;
+  initialAccessibilityRating: number;
+  coverImage?: string;
+  privateAdminNote?: string;
+  isEncrypted: boolean;
+  status: StorySubmissionStatus;
+  reviewNote?: string;
+  publishedStoryId?: string;
+  authorUid: string;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
 export interface StoryComment {
   id: string;
   storyId: string;

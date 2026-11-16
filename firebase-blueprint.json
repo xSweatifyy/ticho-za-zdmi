@@ -172,6 +172,65 @@
         "authorUid",
         "createdAt"
       ]
+    },
+    "StorySubmission": {
+      "title": "StorySubmission",
+      "description": "User-submitted story awaiting editorial moderation (approve, edit, or reject)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "excerpt": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 40000 },
+        "facilityName": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "facilityType": {
+          "type": "string",
+          "enum": ["psychiatricka_nemocnice", "psychiatricka_lecebna", "detska_psychiatricka_nemocnice", "detska_psychiatricka_lecebna", "krizove_centrum", "denni_stacionar", "detska_psychiatrie", "cdz_ambulance"]
+        },
+        "country": { "type": "string", "enum": ["CZ", "SK"] },
+        "city": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "placeId": { "type": "string", "maxLength": 256 },
+        "deficiencyCategories": { "type": "array", "description": "List of systemic deficiency categories" },
+        "deficienciesSummary": { "type": "string", "maxLength": 8192 },
+        "isAnonymous": { "type": "boolean" },
+        "authorName": { "type": "string", "maxLength": 512 },
+        "authorAge": { "type": "string", "maxLength": 256 },
+        "initialCareRating": { "type": "number" },
+        "initialStaffRating": { "type": "number" },
+        "initialBuildingRating": { "type": "number" },
+        "initialAccessibilityRating": { "type": "number" },
+        "coverImage": { "type": "string", "maxLength": 512 },
+        "privateAdminNote": { "type": "string", "maxLength": 8192 },
+        "isEncrypted": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reviewNote": { "type": "string", "maxLength": 2048 },
+        "publishedStoryId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "title",
+        "excerpt",
+        "content",
+        "facilityName",
+        "facilityType",
+        "country",
+        "city",
+        "deficiencyCategories",
+        "deficienciesSummary",
+        "isAnonymous",
+        "initialCareRating",
+        "initialStaffRating",
+        "initialBuildingRating",
+        "initialAccessibilityRating",
+        "isEncrypted",
+        "status",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -181,7 +240,11 @@
     },
     "/stories/{storyId}": {
       "schema": { "$ref": "#/entities/Story" },
-      "description": "Publicly readable stories (with client-side encrypted sensitive text)"
+      "description": "Publicly readable stories published by admin (with client-side encrypted sensitive text)"
+    },
+    "/storySubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/StorySubmission" },
+      "description": "Stories submitted by regular accounts for admin approval, editing, or rejection"
     },
     "/stories/{storyId}/private/{contactId}": {
       "schema": { "$ref": "#/entities/StoryPrivateContact" },

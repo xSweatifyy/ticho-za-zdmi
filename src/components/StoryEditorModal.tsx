@@ -19,7 +19,13 @@ import {
   SelectValue,
 } from '@/src/components/ui/select';
 import { Textarea } from '@/src/components/ui/textarea';
-import { createStory, updateStory } from '@/src/lib/repository';
+import {
+  approveAndPublishSubmission,
+  createStory,
+  createStorySubmission,
+  updateStory,
+  updateStorySubmission,
+} from '@/src/lib/repository';
 import {
   DEFICIENCY_LABELS,
   FACILITY_TYPE_LABELS,
@@ -28,6 +34,7 @@ import {
   type FacilityType,
   type MapPlaceResult,
   type Story,
+  type StorySubmission,
 } from '@/src/types/domain';
 
 interface StoryEditorModalProps {
@@ -35,6 +42,7 @@ interface StoryEditorModalProps {
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
   editingStory: Story | null;
+  editingSubmission?: StorySubmission | null;
   prefilledPlace?: MapPlaceResult | null;
 }
 
@@ -43,6 +51,7 @@ export function StoryEditorModal({
   onOpenChange,
   isAdmin,
   editingStory,
+  editingSubmission = null,
   prefilledPlace,
 }: StoryEditorModalProps) {
   const [title, setTitle] = useState('');
@@ -96,6 +105,31 @@ export function StoryEditorModal({
       return;
     }
 
+    if (editingSubmission) {
+      setTitle(editingSubmission.title);
+      setExcerpt(editingSubmission.excerpt);
+      setContent(editingSubmission.content);
+      setFacilityName(editingSubmission.facilityName);
+      setFacilityType(editingSubmission.facilityType);
+      setCountry(editingSubmission.country);
+      setCity(editingSubmission.city);
+      setPlaceId(editingSubmission.placeId || '');
+      setDeficiencies(editingSubmission.deficiencyCategories);
+      setDeficienciesSummary(editingSubmission.deficienciesSummary);
+      setIsAnonymous(editingSubmission.isAnonymous);
+      setIsOfficialEditorial(false);
+      setIsVerified(false);
+      setAuthorName(editingSubmission.authorName || '');
+      setAuthorAge(editingSubmission.authorAge || '');
+      setCareRating(editingSubmission.initialCareRating || 3);
+      setStaffRating(editingSubmission.initialStaffRating || 3);
+      setBuildingRating(editingSubmission.initialBuildingRating || 2);
+      setAccessibilityRating(editingSubmission.initialAccessibilityRating || 3);
+      setCoverImage(editingSubmission.coverImage || 'buildingsHallway');
+      setPrivateAdminNote(editingSubmission.privateAdminNote || '');
+      return;
+    }
+
     setTitle('');
     setExcerpt('');
     setContent('');
@@ -136,7 +170,7 @@ export function StoryEditorModal({
     setAccessibilityRating(3);
     setCoverImage('buildingsHallway');
     setPrivateAdminNote('');
-  }, [open, editingStory, prefilledPlace, isAdmin]);
+  }, [open, editingStory, editingSubmission, prefilledPlace, isAdmin]);
 
   const toggleDeficiency = (cat: DeficiencyCategory) => {
     setDeficiencies((prev) =>
@@ -144,52 +178,80 @@ export function StoryEditorModal({
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !content.trim() || !facilityName.trim() || !city.trim()) {
-      toast.error('Vyplňte prosím název příběhu, město, název zařízení a samotný text.');
-      return;
-    }
-
+  const buildPayload = () => {
     const computedExcerpt =
       excerpt.trim() || content.trim().split('\n')[0].slice(0, 240) + '…';
+    return {
+      title,
+      excerpt: computedExcerpt,
+      content,
+      facilityName,
+      facilityType,
+      country,
+      city,
+      placeId,
+      deficiencyCategories: deficiencies,
+      deficienciesSummary,
+      isAnonymous,
+      isOfficialEditorial: isAdmin ? isOfficialEditorial : false,
+      isVerified: isAdmin ? isVerified : false,
+      authorName: isAnonymous ? '' : authorName,
+      authorAge,
+      initialCareRating: careRating,
+      initialStaffRating: staffRating,
+      initialBuildingRating: buildingRating,
+      initialAccessibilityRating: accessibilityRating,
+      coverImage,
+      privateAdminNote,
+    };
+  };
+
+  const validateRequiredFields = () => {
+    if (!title.trim() || !content.trim() || !facilityName.trim() || !city.trim()) {
+      toast.error('Vyplňte prosím název příběhu, město, název zařízení a samotný text.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateRequiredFields()) return;
 
     setSaving(true);
     try {
-      const payload = {
-        title,
-        excerpt: computedExcerpt,
-        content,
-        facilityName,
-        facilityType,
-        country,
-        city,
-        placeId,
-        deficiencyCategories: deficiencies,
-        deficienciesSummary,
-        isAnonymous,
-        isOfficialEditorial: isAdmin ? isOfficialEditorial : false,
-        isVerified: isAdmin ? isVerified : false,
-        authorName: isAnonymous ? '' : authorName,
-        authorAge,
-        initialCareRating: careRating,
-        initialStaffRating: staffRating,
-        initialBuildingRating: buildingRating,
-        initialAccessibilityRating: accessibilityRating,
-        coverImage,
-        privateAdminNote,
-      };
+      const payload = buildPayload();
 
       if (editingStory) {
         await updateStory(editingStory.id, payload);
         toast.success('Příběh byl aktualizován.');
-      } else {
+      } else if (editingSubmission) {
+        await approveAndPublishSubmission(editingSubmission.id, payload);
+        toast.success('Příběh byl upraven, schválen a zveřejněn na blogu.');
+      } else if (isAdmin) {
         await createStory(payload);
         toast.success('Příběh byl bezpečně zveřejněn.');
+      } else {
+        await createStorySubmission(payload);
+        toast.success('Příběh byl odeslán redakci ke schválení.');
       }
       onOpenChange(false);
     } catch {
       toast.error('Nepodařilo se uložit příběh do databáze.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDraftSubmission = async () => {
+    if (!editingSubmission || !validateRequiredFields()) return;
+    setSaving(true);
+    try {
+      await updateStorySubmission(editingSubmission.id, buildPayload());
+      toast.success('Úpravy návrhu byly uloženy. Příběh zůstává ve frontě ke schválení.');
+      onOpenChange(false);
+    } catch {
+      toast.error('Nepodařilo se uložit úpravy návrhu.');
     } finally {
       setSaving(false);
     }
@@ -201,14 +263,19 @@ export function StoryEditorModal({
         <DialogHeader>
           <DialogTitle>
             {editingStory
-              ? 'Upravit příběh'
-              : isAdmin
-                ? 'Publikovat nový příběh'
-                : 'Sdílet vlastní příběh anonymně'}
+              ? 'Upravit zveřejněný příběh'
+              : editingSubmission
+                ? 'Upravit a schválit příběh čtenáře'
+                : isAdmin
+                  ? 'Publikovat nový příběh'
+                  : 'Odeslat příběh ke schválení redakci'}
           </DialogTitle>
           <DialogDescription>
-            Sdílejte zkušenost, která vás nebo vaše blízké změnila, a pomozte zmapovat skutečný
-            stav péče v ČR a SR.
+            {editingSubmission
+              ? 'Můžete upravit text, údaje o zařízení nebo nastavit odznak ověřené zkušenosti a následně příběh zveřejnit.'
+              : isAdmin
+                ? 'Sdílejte zkušenost, která vás nebo vaše blízké změnila, a pomozte zmapovat skutečný stav péče v ČR a SR.'
+                : 'Váš příběh se nezveřejní okamžitě — odešle se ke kontrole hlavnímu správci (redakci), který jej schválí, případně upraví nebo zamítne.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -439,30 +506,55 @@ export function StoryEditorModal({
               </div>
             )}
 
-            {!editingStory && (
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-medium text-foreground">
-                  Soukromý vzkaz pouze pro správce blogu (nepovinné, nezveřejňuje se)
-                </label>
-                <Input
-                  value={privateAdminNote}
-                  onChange={(e) => setPrivateAdminNote(e.target.value)}
-                  placeholder="Např. upřesnění pro ověření nebo kontakt, pokud chcete odpověď…"
-                />
+            {editingSubmission && editingSubmission.privateAdminNote ? (
+              <div className="space-y-1 p-3 rounded-md border border-primary/25 bg-primary/5 text-xs">
+                <p className="font-medium text-foreground">
+                  Soukromý vzkaz od autora pro redakci:
+                </p>
+                <p className="text-muted-foreground whitespace-pre-line">
+                  {editingSubmission.privateAdminNote}
+                </p>
               </div>
+            ) : (
+              !editingStory && (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-medium text-foreground">
+                    Soukromý vzkaz pouze pro správce blogu (nepovinné, nezveřejňuje se)
+                  </label>
+                  <Input
+                    value={privateAdminNote}
+                    onChange={(e) => setPrivateAdminNote(e.target.value)}
+                    placeholder="Např. upřesnění pro ověření nebo kontakt, pokud chcete odpověď…"
+                  />
+                </div>
+              )
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Zrušit
             </Button>
+            {editingSubmission && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => void handleSaveDraftSubmission()}
+              >
+                Uložit úpravy bez zveřejnění
+              </Button>
+            )}
             <Button type="submit" disabled={saving}>
               {saving
                 ? 'Ukládám…'
                 : editingStory
                   ? 'Uložit změny'
-                  : 'Zveřejnit příběh'}
+                  : editingSubmission
+                    ? 'Schválit a zveřejnit'
+                    : isAdmin
+                      ? 'Zveřejnit příběh'
+                      : 'Odeslat ke schválení'}
             </Button>
           </DialogFooter>
         </form>

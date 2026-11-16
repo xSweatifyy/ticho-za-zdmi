@@ -4,6 +4,10 @@ import {
   AlertTriangle,
   BadgeCheck,
   BookOpen,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  FileText,
   LogOut,
   MapPin,
   Moon,
@@ -13,6 +17,7 @@ import {
   Sparkles,
   Sun,
   User as UserIcon,
+  XCircle,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { AdminDashboardModal } from '@/src/components/AdminDashboardModal';
@@ -25,15 +30,24 @@ import { StoryDetailModal } from '@/src/components/StoryDetailModal';
 import { StoryEditorModal } from '@/src/components/StoryEditorModal';
 import { Button } from '@/src/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog';
 import { Input } from '@/src/components/ui/input';
 import { ADMIN_EDITORIAL_SEEDS } from '@/src/data/editorialSeeds';
 import { ADMIN_EMAIL, auth } from '@/src/lib/firebase';
 import { EDITORIAL_MEDIA, resolveStoryImage } from '@/src/lib/media';
 import {
   createStory,
+  subscribeAllStorySubmissions,
   subscribeFacilityReports,
   subscribeStories,
   subscribeStoryRatings,
+  subscribeUserStorySubmissions,
 } from '@/src/lib/repository';
 import { formatCzechDate, normalizeForSearch } from '@/src/lib/utils';
 import {
@@ -45,6 +59,7 @@ import {
   type MapPlaceResult,
   type Story,
   type StoryRating,
+  type StorySubmission,
 } from '@/src/types/domain';
 
 export default function App() {
@@ -53,6 +68,8 @@ export default function App() {
 
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
+  const [submissions, setSubmissions] = useState<StorySubmission[]>([]);
+  const [mySubmissions, setMySubmissions] = useState<StorySubmission[]>([]);
   const [ratings, setRatings] = useState<StoryRating[]>([]);
   const [facilityReports, setFacilityReports] = useState<FacilityReport[]>([]);
 
@@ -69,8 +86,10 @@ export default function App() {
   });
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
+  const [editingSubmission, setEditingSubmission] = useState<StorySubmission | null>(null);
   const [prefilledPlace, setPrefilledPlace] = useState<MapPlaceResult | null>(null);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [mySubmissionsOpen, setMySubmissionsOpen] = useState(false);
   const [seedingInitial, setSeedingInitial] = useState(false);
 
   // Maps Demo Quota banner state
@@ -151,6 +170,33 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!authReady || !user) {
+      setSubmissions([]);
+      setMySubmissions([]);
+      return;
+    }
+
+    if (isAdmin) {
+      setMySubmissions([]);
+      const unsubAll = subscribeAllStorySubmissions((data) => {
+        setSubmissions(data);
+      });
+      return () => unsubAll();
+    }
+
+    setSubmissions([]);
+    const unsubMine = subscribeUserStorySubmissions(user.uid, (data) => {
+      setMySubmissions(data);
+    });
+    return () => unsubMine();
+  }, [authReady, user, isAdmin]);
+
+  const pendingSubmissionsCount = useMemo(
+    () => submissions.filter((s) => s.status === 'pending').length,
+    [submissions]
+  );
+
   // Rating averages per story
   const ratingsByStoryId = useMemo(() => {
     const map: Record<string, { sumCare: number; count: number }> = {};
@@ -205,6 +251,7 @@ export default function App() {
       return;
     }
     setEditingStory(null);
+    setEditingSubmission(null);
     setPrefilledPlace(null);
     setEditorOpen(true);
   };
@@ -215,12 +262,21 @@ export default function App() {
       return;
     }
     setEditingStory(null);
+    setEditingSubmission(null);
     setPrefilledPlace(place);
     setEditorOpen(true);
   };
 
   const handleEditStory = (story: Story) => {
     setEditingStory(story);
+    setEditingSubmission(null);
+    setPrefilledPlace(null);
+    setEditorOpen(true);
+  };
+
+  const handleEditSubmission = (submission: StorySubmission) => {
+    setEditingStory(null);
+    setEditingSubmission(submission);
     setPrefilledPlace(null);
     setEditorOpen(true);
   };
@@ -341,7 +397,9 @@ export default function App() {
                   className="whitespace-nowrap shrink-0"
                 >
                   <Shield className="h-4 w-4" />
-                  Administrace
+                  {pendingSubmissionsCount > 0
+                    ? `Administrace (${pendingSubmissionsCount})`
+                    : 'Administrace'}
                 </Button>
                 <Button
                   size="icon"
@@ -355,13 +413,25 @@ export default function App() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                {mySubmissions.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setMySubmissionsOpen(true)}
+                    className="whitespace-nowrap shrink-0"
+                    title="Stav odeslaných příběhů ke schválení"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">Moje návrhy</span> ({mySubmissions.length})
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   onClick={handleOpenShareStory}
                   className="whitespace-nowrap shrink-0"
                 >
                   <PenSquare className="h-4 w-4" />
-                  Sdílet příběh
+                  Odeslat příběh
                 </Button>
                 <Button
                   size="icon"
@@ -402,7 +472,7 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button size="lg" onClick={handleOpenShareStory}>
                       <PenSquare className="h-4 w-4" />
-                      Sdílet příběh anonymně
+                      {isAdmin ? 'Přidat příběh' : 'Odeslat příběh ke schválení'}
                     </Button>
                     <Button size="lg" variant="outline" asChild>
                       <a href="#mapa-zarizeni">
@@ -562,7 +632,7 @@ export default function App() {
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {stories.length === 0
-                      ? 'Přihlaste se a sdílejte první anonymní zkušenost, nebo jako správce publikujte úvodní redakční příběhy.'
+                      ? 'Přihlaste se a odešlete první anonymní zkušenost ke schválení redakci, nebo jako správce publikujte úvodní redakční příběhy.'
                       : 'Zkuste upravit hledané klíčové slovo nebo přepnout filtr typu léčebny.'}
                   </p>
                 </div>
@@ -587,7 +657,7 @@ export default function App() {
                         : 'Nahrát 4 úvodní redakční příběhy'}
                     </Button>
                   ) : (
-                    <Button onClick={handleOpenShareStory}>Sdílet první příběh anonymně</Button>
+                    <Button onClick={handleOpenShareStory}>Odeslat první příběh ke schválení</Button>
                   )}
                 </div>
               </Card>
@@ -815,7 +885,7 @@ export default function App() {
                 onClick={handleOpenShareStory}
                 className="hover:text-foreground cursor-pointer"
               >
-                Sdílet anonymně
+                {isAdmin ? 'Přidat příběh' : 'Odeslat příběh ke schválení'}
               </button>
             </div>
           </div>
@@ -843,24 +913,123 @@ export default function App() {
 
       <StoryEditorModal
         open={editorOpen}
-        onOpenChange={setEditorOpen}
+        onOpenChange={(v) => {
+          setEditorOpen(v);
+          if (!v) setEditingSubmission(null);
+        }}
         isAdmin={isAdmin}
         editingStory={editingStory}
+        editingSubmission={editingSubmission}
         prefilledPlace={prefilledPlace}
       />
+
+      {user && !isAdmin && (
+        <Dialog open={mySubmissionsOpen} onOpenChange={setMySubmissionsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Moje odeslané příběhy</DialogTitle>
+              <DialogDescription>
+                Přehled příběhů, které jste odeslali redakci ke kontrole a schválení před
+                zveřejněním.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              {mySubmissions.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  Zatím jste neodeslali žádný příběh ke schválení.
+                </p>
+              ) : (
+                mySubmissions.map((sub) => {
+                  const publishedStory = sub.publishedStoryId
+                    ? stories.find((st) => st.id === sub.publishedStoryId)
+                    : undefined;
+                  return (
+                    <div
+                      key={sub.id}
+                      className="rounded-lg border border-border bg-card p-4 space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="font-serif text-base font-semibold leading-snug">
+                            {sub.title}
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            {sub.facilityName}, {sub.city} ({sub.country}) · Odesláno{' '}
+                            {formatCzechDate(sub.createdAt)}
+                          </p>
+                        </div>
+
+                        {sub.status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 shrink-0">
+                            <Clock className="h-3.5 w-3.5" />
+                            Čeká na schválení
+                          </span>
+                        )}
+                        {sub.status === 'approved' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 shrink-0">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Schváleno a zveřejněno
+                          </span>
+                        )}
+                        {sub.status === 'rejected' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive shrink-0">
+                            <XCircle className="h-3.5 w-3.5" />
+                            Zamítnuto redakcí
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {sub.excerpt}
+                      </p>
+
+                      {sub.reviewNote && (
+                        <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-foreground">
+                          <span className="font-medium">Vyjádření redakce: </span>
+                          {sub.reviewNote}
+                        </div>
+                      )}
+
+                      {sub.status === 'approved' && publishedStory && (
+                        <div className="pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setMySubmissionsOpen(false);
+                              setSelectedStoryId(publishedStory.id);
+                            }}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Zobrazit zveřejněný příběh
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {isAdmin && (
         <AdminDashboardModal
           open={adminModalOpen}
           onOpenChange={setAdminModalOpen}
           stories={stories}
+          submissions={submissions}
           reports={facilityReports}
           onCreateNew={() => {
             setEditingStory(null);
+            setEditingSubmission(null);
             setPrefilledPlace(null);
             setEditorOpen(true);
           }}
           onEditStory={handleEditStory}
+          onEditSubmission={handleEditSubmission}
         />
       )}
     </div>

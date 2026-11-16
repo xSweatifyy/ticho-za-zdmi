@@ -9,6 +9,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { decryptText, encryptText } from '@/src/lib/crypto';
@@ -22,6 +23,8 @@ import type {
   Story,
   StoryComment,
   StoryRating,
+  StorySubmission,
+  StorySubmissionStatus,
 } from '@/src/types/domain';
 
 function toDate(val: unknown): Date | null {
@@ -282,6 +285,335 @@ export async function deleteStory(storyId: string): Promise<void> {
     await deleteDoc(doc(db, 'stories', storyId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, storyPath);
+  }
+}
+
+async function mapSubmissionSnapshotDocs(
+  docs: Array<{ id: string; data: () => Record<string, unknown> }>
+): Promise<StorySubmission[]> {
+  const asOptionalStr = (val: unknown): string | undefined =>
+    typeof val === 'string' && val.length > 0 ? val : undefined;
+
+  return Promise.all(
+    docs.map(async (docSnap) => {
+      const raw = docSnap.data();
+      const [
+        title,
+        excerpt,
+        content,
+        deficienciesSummary,
+        authorName,
+        authorAge,
+        privateAdminNote,
+        reviewNote,
+      ] = await Promise.all([
+        decryptText(asOptionalStr(raw.title)),
+        decryptText(asOptionalStr(raw.excerpt)),
+        decryptText(asOptionalStr(raw.content)),
+        decryptText(asOptionalStr(raw.deficienciesSummary)),
+        asOptionalStr(raw.authorName)
+          ? decryptText(asOptionalStr(raw.authorName))
+          : Promise.resolve(''),
+        asOptionalStr(raw.authorAge)
+          ? decryptText(asOptionalStr(raw.authorAge))
+          : Promise.resolve(''),
+        asOptionalStr(raw.privateAdminNote)
+          ? decryptText(asOptionalStr(raw.privateAdminNote))
+          : Promise.resolve(''),
+        asOptionalStr(raw.reviewNote)
+          ? decryptText(asOptionalStr(raw.reviewNote))
+          : Promise.resolve(''),
+      ]);
+
+      return {
+        id: docSnap.id,
+        title,
+        excerpt,
+        content,
+        facilityName: String(raw.facilityName || ''),
+        facilityType: raw.facilityType as FacilityType,
+        country: (raw.country === 'SK' ? 'SK' : 'CZ') as CountryCode,
+        city: String(raw.city || ''),
+        placeId: raw.placeId ? String(raw.placeId) : undefined,
+        deficiencyCategories: Array.isArray(raw.deficiencyCategories)
+          ? (raw.deficiencyCategories as DeficiencyCategory[])
+          : [],
+        deficienciesSummary,
+        isAnonymous: Boolean(raw.isAnonymous),
+        authorName: authorName || undefined,
+        authorAge: authorAge || undefined,
+        initialCareRating: Number(raw.initialCareRating ?? 0),
+        initialStaffRating: Number(raw.initialStaffRating ?? 0),
+        initialBuildingRating: Number(raw.initialBuildingRating ?? 0),
+        initialAccessibilityRating: Number(raw.initialAccessibilityRating ?? 0),
+        coverImage: raw.coverImage ? String(raw.coverImage) : undefined,
+        privateAdminNote: privateAdminNote || undefined,
+        isEncrypted: Boolean(raw.isEncrypted),
+        status: (raw.status === 'approved' || raw.status === 'rejected'
+          ? raw.status
+          : 'pending') as StorySubmissionStatus,
+        reviewNote: reviewNote || undefined,
+        publishedStoryId: raw.publishedStoryId ? String(raw.publishedStoryId) : undefined,
+        authorUid: String(raw.authorUid || ''),
+        createdAt: toDate(raw.createdAt),
+        updatedAt: toDate(raw.updatedAt),
+      } satisfies StorySubmission;
+    })
+  );
+}
+
+export function subscribeAllStorySubmissions(
+  onData: (submissions: StorySubmission[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const path = 'storySubmissions';
+  const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    q,
+    async (snapshot) => {
+      try {
+        const items = await mapSubmissionSnapshotDocs(snapshot.docs);
+        onData(items);
+      } catch (err) {
+        if (onError) onError(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        if (onError) onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export function subscribeUserStorySubmissions(
+  uid: string,
+  onData: (submissions: StorySubmission[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const path = 'storySubmissions';
+  const q = query(collection(db, path), where('authorUid', '==', uid));
+
+  return onSnapshot(
+    q,
+    async (snapshot) => {
+      try {
+        const items = await mapSubmissionSnapshotDocs(snapshot.docs);
+        items.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+        onData(items);
+      } catch (err) {
+        if (onError) onError(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        if (onError) onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export async function createStorySubmission(input: CreateStoryInput): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Pro odeslání příběhu ke schválení je nutné přihlášení.');
+  }
+
+  const submissionId = generateSafeId('sub');
+  const submissionPath = `storySubmissions/${submissionId}`;
+
+  const [
+    encTitle,
+    encExcerpt,
+    encContent,
+    encDefSummary,
+    encAuthorName,
+    encAuthorAge,
+    encPrivateNote,
+  ] = await Promise.all([
+    encryptText(clampString(input.title, 400)),
+    encryptText(clampString(input.excerpt, 800)),
+    encryptText(clampString(input.content, 20000)),
+    encryptText(clampString(input.deficienciesSummary, 3500)),
+    input.authorName?.trim() ? encryptText(clampString(input.authorName, 120)) : Promise.resolve(''),
+    input.authorAge?.trim() ? encryptText(clampString(input.authorAge, 32)) : Promise.resolve(''),
+    input.privateAdminNote?.trim()
+      ? encryptText(clampString(input.privateAdminNote, 3500))
+      : Promise.resolve(''),
+  ]);
+
+  const payload: Record<string, unknown> = {
+    id: submissionId,
+    title: clampString(encTitle, 1024),
+    excerpt: clampString(encExcerpt, 2048),
+    content: clampString(encContent, 40000),
+    facilityName: clampString(input.facilityName, 512),
+    facilityType: input.facilityType,
+    country: input.country,
+    city: clampString(input.city, 256),
+    deficiencyCategories: input.deficiencyCategories.slice(0, 8),
+    deficienciesSummary: clampString(encDefSummary, 8192),
+    isAnonymous: input.isAnonymous,
+    initialCareRating: Number(input.initialCareRating) || 0,
+    initialStaffRating: Number(input.initialStaffRating) || 0,
+    initialBuildingRating: Number(input.initialBuildingRating) || 0,
+    initialAccessibilityRating: Number(input.initialAccessibilityRating) || 0,
+    isEncrypted: true,
+    status: 'pending',
+    authorUid: user.uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (input.placeId?.trim()) payload.placeId = clampString(input.placeId, 256);
+  if (encAuthorName) payload.authorName = clampString(encAuthorName, 512);
+  if (encAuthorAge) payload.authorAge = clampString(encAuthorAge, 256);
+  if (input.coverImage?.trim()) payload.coverImage = clampString(input.coverImage, 512);
+  if (encPrivateNote) payload.privateAdminNote = clampString(encPrivateNote, 8192);
+
+  try {
+    await setDoc(doc(db, 'storySubmissions', submissionId), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, submissionPath);
+  }
+
+  return submissionId;
+}
+
+export async function updateStorySubmission(
+  submissionId: string,
+  input: CreateStoryInput
+): Promise<void> {
+  const submissionPath = `storySubmissions/${submissionId}`;
+  const [encTitle, encExcerpt, encContent, encDefSummary, encAuthorName, encAuthorAge] =
+    await Promise.all([
+      encryptText(clampString(input.title, 400)),
+      encryptText(clampString(input.excerpt, 800)),
+      encryptText(clampString(input.content, 20000)),
+      encryptText(clampString(input.deficienciesSummary, 3500)),
+      input.authorName?.trim()
+        ? encryptText(clampString(input.authorName, 120))
+        : Promise.resolve(''),
+      input.authorAge?.trim() ? encryptText(clampString(input.authorAge, 32)) : Promise.resolve(''),
+    ]);
+
+  const updatePayload: Record<string, unknown> = {
+    title: clampString(encTitle, 1024),
+    excerpt: clampString(encExcerpt, 2048),
+    content: clampString(encContent, 40000),
+    facilityName: clampString(input.facilityName, 512),
+    facilityType: input.facilityType,
+    country: input.country,
+    city: clampString(input.city, 256),
+    placeId: input.placeId?.trim() ? clampString(input.placeId, 256) : '',
+    deficiencyCategories: input.deficiencyCategories.slice(0, 8),
+    deficienciesSummary: clampString(encDefSummary, 8192),
+    isAnonymous: input.isAnonymous,
+    authorName: encAuthorName ? clampString(encAuthorName, 512) : '',
+    authorAge: encAuthorAge ? clampString(encAuthorAge, 256) : '',
+    initialCareRating: Number(input.initialCareRating) || 0,
+    initialStaffRating: Number(input.initialStaffRating) || 0,
+    initialBuildingRating: Number(input.initialBuildingRating) || 0,
+    initialAccessibilityRating: Number(input.initialAccessibilityRating) || 0,
+    coverImage: input.coverImage?.trim() ? clampString(input.coverImage, 512) : '',
+    isEncrypted: true,
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'storySubmissions', submissionId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, submissionPath);
+  }
+}
+
+export async function approveAndPublishSubmission(
+  submissionId: string,
+  input: CreateStoryInput
+): Promise<string> {
+  const storyId = await createStory({
+    ...input,
+    privateAdminNote: undefined,
+  });
+
+  const submissionPath = `storySubmissions/${submissionId}`;
+  const [encTitle, encExcerpt, encContent, encDefSummary, encAuthorName, encAuthorAge] =
+    await Promise.all([
+      encryptText(clampString(input.title, 400)),
+      encryptText(clampString(input.excerpt, 800)),
+      encryptText(clampString(input.content, 20000)),
+      encryptText(clampString(input.deficienciesSummary, 3500)),
+      input.authorName?.trim()
+        ? encryptText(clampString(input.authorName, 120))
+        : Promise.resolve(''),
+      input.authorAge?.trim() ? encryptText(clampString(input.authorAge, 32)) : Promise.resolve(''),
+    ]);
+
+  try {
+    await updateDoc(doc(db, 'storySubmissions', submissionId), {
+      title: clampString(encTitle, 1024),
+      excerpt: clampString(encExcerpt, 2048),
+      content: clampString(encContent, 40000),
+      facilityName: clampString(input.facilityName, 512),
+      facilityType: input.facilityType,
+      country: input.country,
+      city: clampString(input.city, 256),
+      placeId: input.placeId?.trim() ? clampString(input.placeId, 256) : '',
+      deficiencyCategories: input.deficiencyCategories.slice(0, 8),
+      deficienciesSummary: clampString(encDefSummary, 8192),
+      isAnonymous: input.isAnonymous,
+      authorName: encAuthorName ? clampString(encAuthorName, 512) : '',
+      authorAge: encAuthorAge ? clampString(encAuthorAge, 256) : '',
+      initialCareRating: Number(input.initialCareRating) || 0,
+      initialStaffRating: Number(input.initialStaffRating) || 0,
+      initialBuildingRating: Number(input.initialBuildingRating) || 0,
+      initialAccessibilityRating: Number(input.initialAccessibilityRating) || 0,
+      coverImage: input.coverImage?.trim() ? clampString(input.coverImage, 512) : '',
+      status: 'approved',
+      publishedStoryId: storyId,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, submissionPath);
+  }
+
+  return storyId;
+}
+
+export async function rejectStorySubmission(
+  submissionId: string,
+  reviewNote?: string
+): Promise<void> {
+  const submissionPath = `storySubmissions/${submissionId}`;
+  const encReviewNote = reviewNote?.trim()
+    ? await encryptText(clampString(reviewNote, 900))
+    : '';
+  const payload: Record<string, unknown> = {
+    status: 'rejected',
+    updatedAt: serverTimestamp(),
+  };
+  if (encReviewNote) {
+    payload.reviewNote = clampString(encReviewNote, 2048);
+  }
+
+  try {
+    await updateDoc(doc(db, 'storySubmissions', submissionId), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, submissionPath);
+  }
+}
+
+export async function deleteStorySubmission(submissionId: string): Promise<void> {
+  const submissionPath = `storySubmissions/${submissionId}`;
+  try {
+    await deleteDoc(doc(db, 'storySubmissions', submissionId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, submissionPath);
   }
 }
 
