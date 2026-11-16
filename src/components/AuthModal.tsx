@@ -125,6 +125,17 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
           <Button onClick={handleGoogleLogin} disabled={loading} className="w-full h-11">
             {loading ? 'Probíhá přihlašování…' : 'Pokračovat přes Google účet'}
           </Button>
+
+          <p className="text-xs text-muted-foreground text-center pt-1">
+            Potřebujete pomoc s přihlášením? Napište na{' '}
+            <a
+              href="mailto:info@za-zdmi.fun"
+              className="underline hover:text-foreground transition-colors"
+            >
+              info@za-zdmi.fun
+            </a>
+            .
+          </p>
         </div>
       </DialogContent>
     </Dialog>

@@ -1,4 +1,4 @@
-import { PhoneCall } from 'lucide-react';
+import { Mail, PhoneCall } from 'lucide-react';
 
 export function CrisisBanner() {
   const helplines = [
@@ -67,6 +67,21 @@ export function CrisisBanner() {
               <p className="text-xs text-white/75">{line.detail}</p>
             </div>
           ))}
+        </div>
+
+        <div className="pt-2 border-t border-white/15 flex flex-wrap items-center justify-between gap-2 text-xs text-white/80">
+          <span className="inline-flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              E-mailová podpora webu a kontakt na redakci:{' '}
+              <a
+                href="mailto:info@za-zdmi.fun"
+                className="underline font-medium text-white hover:text-white/90"
+              >
+                info@za-zdmi.fun
+              </a>
+            </span>
+          </span>
         </div>
       </div>
     </section>

@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileText,
   LogOut,
+  Mail,
   MapPin,
   Moon,
   PenSquare,
@@ -887,12 +888,28 @@ export default function App() {
               >
                 {isAdmin ? 'Přidat příběh' : 'Odeslat příběh ke schválení'}
               </button>
+              <a
+                href="mailto:info@za-zdmi.fun"
+                className="inline-flex items-center gap-1.5 hover:text-foreground font-medium text-foreground"
+              >
+                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                info@za-zdmi.fun
+              </a>
             </div>
           </div>
 
-          <div className="pt-6 border-t border-border/60">
+          <div className="pt-6 border-t border-border/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <p>
               © {new Date().getFullYear()} Ondřej Anděl - Ticho za zdmi. Všechna práva vyhrazena.
+            </p>
+            <p>
+              E-mailová podpora:{' '}
+              <a
+                href="mailto:info@za-zdmi.fun"
+                className="underline hover:text-foreground transition-colors"
+              >
+                info@za-zdmi.fun
+              </a>
             </p>
           </div>
         </div>
